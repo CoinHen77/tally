@@ -19,29 +19,50 @@ const C = {
 };
 
 const SERVICES = [
-  { name: "Netflix",     color: "#C7141B", logo: "https://logo.clearbit.com/netflix.com" },
-  { name: "Hulu",        color: "#1A8F5E", logo: "https://logo.clearbit.com/hulu.com" },
-  { name: "Max",         color: "#5A2BB8", logo: "https://logo.clearbit.com/max.com" },
-  { name: "Disney+",     color: "#0F3FB0", logo: "https://logo.clearbit.com/disneyplus.com" },
-  { name: "Prime Video", color: "#007FA8", logo: "https://logo.clearbit.com/primevideo.com" },
-  { name: "Apple TV+",   color: "#1D1D1F", logo: "https://logo.clearbit.com/apple.com" },
-  { name: "Paramount+",  color: "#0050C8", logo: "https://logo.clearbit.com/paramountplus.com" },
-  { name: "Peacock",     color: "#5B4B8A", logo: "https://logo.clearbit.com/peacocktv.com" },
-  { name: "Starz",       color: "#8B1A1A", logo: "https://logo.clearbit.com/starz.com" },
-  { name: "Other",       color: "#8A8578", logo: null },
+  { name: "Netflix",     color: "#C7141B", domain: "netflix.com" },
+  { name: "Hulu",        color: "#1A8F5E", domain: "hulu.com" },
+  { name: "Max",         color: "#5A2BB8", domain: "max.com" },
+  { name: "Disney+",     color: "#0F3FB0", domain: "disneyplus.com" },
+  { name: "Prime Video", color: "#007FA8", domain: "primevideo.com" },
+  { name: "Apple TV+",   color: "#1D1D1F", domain: "tv.apple.com" },
+  { name: "Paramount+",  color: "#0050C8", domain: "paramountplus.com" },
+  { name: "Peacock",     color: "#5B4B8A", domain: "peacocktv.com" },
+  { name: "Starz",       color: "#8B1A1A", domain: "starz.com" },
+  { name: "Other",       color: "#8A8578", domain: null },
 ];
 
-function serviceMeta(name) {
-  return SERVICES.find((s) => s.name.toLowerCase() === String(name || "").toLowerCase()) || { color: "#8A8578", logo: null };
+// Map TVMaze network/webChannel names to our SERVICES list
+function matchService(tvmazeName) {
+  if (!tvmazeName) return null;
+  const n = tvmazeName.toLowerCase();
+  if (n.includes("netflix")) return "Netflix";
+  if (n.includes("hulu")) return "Hulu";
+  if (n.includes("max") || n.includes("hbo")) return "Max";
+  if (n.includes("disney")) return "Disney+";
+  if (n.includes("amazon") || n.includes("prime")) return "Prime Video";
+  if (n.includes("apple")) return "Apple TV+";
+  if (n.includes("paramount")) return "Paramount+";
+  if (n.includes("peacock")) return "Peacock";
+  if (n.includes("starz")) return "Starz";
+  return null;
 }
 
-function ServiceLogo({ name, size = 20, style: extraStyle = {} }) {
+function faviconUrl(domain) {
+  return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+}
+
+function serviceMeta(name) {
+  return SERVICES.find((s) => s.name.toLowerCase() === String(name || "").toLowerCase()) || { color: "#8A8578", domain: null };
+}
+
+function ServiceLogo({ name, logoUrl, size = 20, style: extraStyle = {} }) {
   const meta = serviceMeta(name);
   const [failed, setFailed] = React.useState(false);
-  if (meta.logo && !failed) {
+  const src = logoUrl || (meta.domain ? faviconUrl(meta.domain) : null);
+  if (src && !failed) {
     return (
       <img
-        src={meta.logo}
+        src={src}
         alt={name}
         onError={() => setFailed(true)}
         style={{ width: size, height: size, objectFit: "contain", borderRadius: 4, flexShrink: 0, ...extraStyle }}
@@ -151,8 +172,9 @@ function TallyTracker({ total, watched, onChange }) {
 }
 
 /* ---------- small ui bits ---------- */
-function Chip({ label, color, logo, selected, onClick }) {
+function Chip({ label, color, domain, selected, onClick }) {
   const [logoFailed, setLogoFailed] = React.useState(false);
+  const src = domain ? faviconUrl(domain) : null;
   return (
     <button
       onClick={onClick}
@@ -170,8 +192,8 @@ function Chip({ label, color, logo, selected, onClick }) {
         cursor: "pointer",
       }}
     >
-      {logo && !logoFailed
-        ? <img src={logo} alt="" onError={() => setLogoFailed(true)} style={{ width: 18, height: 18, objectFit: "contain", borderRadius: 3, flexShrink: 0 }} />
+      {src && !logoFailed
+        ? <img src={src} alt="" onError={() => setLogoFailed(true)} style={{ width: 18, height: 18, objectFit: "contain", borderRadius: 3, flexShrink: 0 }} />
         : <span style={{ width: 9, height: 9, borderRadius: 99, background: color, display: "inline-block" }} />
       }
       {label}
@@ -245,6 +267,53 @@ function Poster({ url, title, type, size = 56 }) {
     >
       {type === "movie" ? <Film size={22} color={C.amber} /> : <Tv size={22} color={C.amber} />}
     </div>
+  );
+}
+
+/* ---------- star rating ---------- */
+function StarRating({ value = 0, onChange, size = 32, readonly = false }) {
+  const [hovered, setHovered] = React.useState(0);
+  return (
+    <div style={{ display: "flex", gap: 4 }}>
+      {[1, 2, 3, 4, 5].map((star) => {
+        const filled = (hovered || value) >= star;
+        return (
+          <button
+            key={star}
+            onClick={() => !readonly && onChange(value === star ? 0 : star)}
+            onMouseEnter={() => !readonly && setHovered(star)}
+            onMouseLeave={() => !readonly && setHovered(0)}
+            aria-label={`${star} star${star !== 1 ? "s" : ""}`}
+            style={{
+              width: size + 8,
+              height: size + 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "transparent",
+              border: "none",
+              cursor: readonly ? "default" : "pointer",
+              padding: 0,
+              fontSize: size,
+              lineHeight: 1,
+              color: filled ? "#E8A020" : C.line,
+              transition: "color 100ms ease",
+            }}
+          >
+            ★
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function StarDisplay({ value = 0, size = 14 }) {
+  if (!value) return null;
+  return (
+    <span style={{ fontSize: size, letterSpacing: -1, color: "#E8A020" }}>
+      {"★".repeat(value)}{"☆".repeat(5 - value)}
+    </span>
   );
 }
 
@@ -382,8 +451,8 @@ export default function Tally() {
               setPendingAdd(null);
               setView("home");
             }}
-            onSave={(service) => {
-              addItem({ ...pendingAdd, service });
+            onSave={(service, networkLogoUrl) => {
+              addItem({ ...pendingAdd, service, networkLogoUrl: networkLogoUrl || null });
               setPendingAdd(null);
               setTab("watching");
               setView("home");
@@ -512,21 +581,24 @@ function HomeScreen({ items, tab, setTab, onOpen, onAdd }) {
                 )}
                 <div style={{ fontSize: 17, fontWeight: 800, color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.title}</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 7, margin: "4px 0 6px" }}>
-                  <ServiceLogo name={it.service} size={18} />
+                  <ServiceLogo name={it.service} logoUrl={it.networkLogoUrl} size={18} />
                   <span style={{ fontSize: 13, color: C.inkSoft, fontWeight: 600 }}>{it.service || "No service set"}</span>
                 </div>
-                <div
-                  style={{
-                    display: "inline-block",
-                    fontSize: 12.5,
-                    fontWeight: 700,
-                    padding: "3px 9px",
-                    borderRadius: 999,
-                    background: finished ? C.sageBg : C.amberBg,
-                    color: finished ? C.sage : C.amber,
-                  }}
-                >
-                  {progressLabel(it)}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <div
+                    style={{
+                      display: "inline-block",
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      padding: "3px 9px",
+                      borderRadius: 999,
+                      background: finished ? C.sageBg : C.amberBg,
+                      color: finished ? C.sage : C.amber,
+                    }}
+                  >
+                    {progressLabel(it)}
+                  </div>
+                  {it.rating > 0 && <StarDisplay value={it.rating} size={13} />}
                 </div>
               </div>
             </button>
@@ -651,12 +723,21 @@ function SearchScreen({ onBack, onSelectShow, onManualFallback }) {
       eps.forEach((ep) => { if (ep.season >= 1) map[ep.season] = (map[ep.season] || 0) + 1; });
       const seasons = Object.keys(map).map(Number).sort((a, b) => a - b)
         .map((n) => ({ number: n, total: map[n], watched: 0 }));
+
+      // Extract network/channel info from TVMaze
+      const channel = show.webChannel || show.network || null;
+      const networkName = channel?.name || null;
+      const networkLogoUrl = channel?.image?.medium || null;
+      const matchedService = matchService(networkName);
+
       onSelectShow({
         type: "show",
         title: show.name,
         posterUrl: show.image ? show.image.medium : null,
         tvmazeId: show.id,
         synopsis: stripHtml(show.summary),
+        service: matchedService || networkName || "",
+        networkLogoUrl: matchedService ? null : networkLogoUrl,
         seasons: seasons.length ? seasons : [{ number: 1, total: 1, watched: 0 }],
         finalSeason: show.status === "Ended",
       });
@@ -729,8 +810,10 @@ function SearchScreen({ onBack, onSelectShow, onManualFallback }) {
 
 /* ---------- confirm add (from search) ---------- */
 function ConfirmAddScreen({ pending, onBack, onCancel, onSave }) {
-  const [service, setService] = useState("");
-  const [customService, setCustomService] = useState("");
+  const [service, setService] = useState(pending.service || "");
+  const [customService, setCustomService] = useState(
+    pending.service && !SERVICES.find(s => s.name === pending.service) ? pending.service : ""
+  );
   const totalEp = pending.seasons.reduce((a, s) => a + s.total, 0);
   const finalService = service === "Other" ? customService.trim() : service;
 
@@ -752,7 +835,7 @@ function ConfirmAddScreen({ pending, onBack, onCancel, onSave }) {
         <div style={{ fontSize: 14, fontWeight: 800, color: C.inkSoft, letterSpacing: 0.4, marginBottom: 10 }}>WHERE WILL YOU WATCH IT?</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 9, marginBottom: service === "Other" ? 12 : 26 }}>
           {SERVICES.map((s) => (
-            <Chip key={s.name} label={s.name} color={s.color} logo={s.logo} selected={service === s.name} onClick={() => setService(s.name)} />
+            <Chip key={s.name} label={s.name} color={s.color} domain={s.domain} selected={service === s.name} onClick={() => setService(s.name)} />
           ))}
         </div>
         {service === "Other" && (
@@ -855,7 +938,7 @@ function ManualAddScreen({ onBack, onSave }) {
         <div style={{ fontSize: 14, fontWeight: 800, color: C.inkSoft, letterSpacing: 0.4, marginBottom: 10 }}>WHERE WILL YOU WATCH IT?</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 9, marginBottom: service === "Other" ? 12 : 26 }}>
           {SERVICES.map((s) => (
-            <Chip key={s.name} label={s.name} color={s.color} logo={s.logo} selected={service === s.name} onClick={() => setService(s.name)} />
+            <Chip key={s.name} label={s.name} color={s.color} domain={s.domain} selected={service === s.name} onClick={() => setService(s.name)} />
           ))}
         </div>
         {service === "Other" && (
@@ -902,6 +985,61 @@ function ManualAddScreen({ onBack, onSave }) {
   );
 }
 
+/* ---------- episode ratings ---------- */
+function EpisodeRatings({ total, ratings = [], onChange }) {
+  const [open, setOpen] = React.useState(false);
+  if (!total || total <= 0) return null;
+
+  function setEpRating(ep, rating) {
+    const next = ratings.filter((r) => r.ep !== ep);
+    if (rating > 0) next.push({ ep, rating });
+    onChange(next);
+  }
+
+  function getRating(ep) {
+    return (ratings.find((r) => r.ep === ep) || {}).rating || 0;
+  }
+
+  const ratedCount = ratings.filter((r) => r.rating > 0).length;
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          background: "transparent",
+          border: "none",
+          padding: "8px 0 4px",
+          cursor: "pointer",
+        }}
+      >
+        <span style={{ fontSize: 12, fontWeight: 800, color: C.inkSoft, letterSpacing: 0.4 }}>
+          EPISODE RATINGS {ratedCount > 0 ? `(${ratedCount} rated)` : ""}
+        </span>
+        <span style={{ fontSize: 13, color: C.inkSoft }}>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+          {Array.from({ length: total }).map((_, i) => {
+            const ep = i + 1;
+            const rating = getRating(ep);
+            return (
+              <div key={ep} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: C.inkSoft, minWidth: 56 }}>Ep {ep}</span>
+                <StarRating value={rating} onChange={(r) => setEpRating(ep, r)} size={20} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------- detail screen ---------- */
 function DetailScreen({ item, onBack, onUpdate, onUpdateSeason, onAddSeason, onDelete }) {
   const [editingService, setEditingService] = useState(false);
@@ -935,9 +1073,19 @@ function DetailScreen({ item, onBack, onUpdate, onUpdateSeason, onAddSeason, onD
           <p style={{ margin: "0 0 16px", fontSize: 14.5, color: C.inkSoft, lineHeight: 1.55 }}>{item.synopsis}</p>
         )}
 
+        <div style={{ background: C.card, borderRadius: 14, padding: "14px 16px", boxShadow: C.shadow, marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: C.inkSoft, letterSpacing: 0.4, marginBottom: 10 }}>YOUR RATING</div>
+          <StarRating value={item.rating || 0} onChange={(r) => onUpdate({ rating: r })} size={30} />
+          {item.rating > 0 && (
+            <div style={{ marginTop: 6, fontSize: 13, color: C.inkSoft }}>
+              {["","Didn't enjoy it","It was okay","Pretty good","Really liked it","Loved it!"][item.rating]}
+            </div>
+          )}
+        </div>
+
         {!editingService ? (
           <button onClick={() => setEditingService(true)} style={{ display: "flex", alignItems: "center", gap: 10, background: "transparent", border: "none", padding: "6px 0 22px", cursor: "pointer" }}>
-            <ServiceLogo name={item.service} size={24} />
+            <ServiceLogo name={item.service} logoUrl={item.networkLogoUrl} size={24} />
             <span style={{ fontSize: 15.5, fontWeight: 700, color: C.ink }}>{item.service || "Set streaming service"}</span>
             <Pencil size={14} color={C.inkSoft} />
           </button>
@@ -1049,6 +1197,21 @@ function DetailScreen({ item, onBack, onUpdate, onUpdateSeason, onAddSeason, onD
                   >
                     {seasonDone ? <><Minus size={15} /> Mark unwatched</> : <><Check size={15} /> Mark season watched</>}
                   </button>
+
+                  <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: C.inkSoft, letterSpacing: 0.4, marginBottom: 8 }}>SEASON RATING</div>
+                    <StarRating
+                      value={s.rating || 0}
+                      onChange={(r) => onUpdateSeason(s.number, { rating: r })}
+                      size={24}
+                    />
+                  </div>
+
+                  <EpisodeRatings
+                    total={s.total}
+                    ratings={s.episodeRatings || []}
+                    onChange={(episodeRatings) => onUpdateSeason(s.number, { episodeRatings })}
+                  />
                 </div>
               );
             })}
@@ -1111,3 +1274,4 @@ function ConfirmDeleteModal({ onCancel, onConfirm }) {
     </div>
   );
 }
+
