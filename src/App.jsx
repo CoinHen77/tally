@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Search, Plus, X, ChevronLeft, Check, Trash2, Tv, Film, Pencil, Minus, Loader2 } from "lucide-react";
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref, onValue, set } from "firebase/database";
+import { getDatabase, ref, onValue, set, get, remove } from "firebase/database";
 
 const firebaseConfig = {
   apiKey: "AIzaSyApP0tlDnKFzEKmBHD3dRw0P9fsqFlxiDA",
@@ -15,7 +15,14 @@ const firebaseConfig = {
 
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
-const itemsRef = ref(db, "items");
+const PROFILES = [
+  { id: "shay-susan", label: "Shay & Susan", color: "#C2492F" },
+  { id: "zach",       label: "Zach",         color: "#4F7959" },
+];
+
+function profileItemsRef(profileId) {
+  return ref(db, `users/${profileId}/items`);
+}
 
 /* ---------- design tokens ---------- */
 const C = {
@@ -350,53 +357,183 @@ function progressLabel(item) {
   return `Season ${activeSeason.number} · ${activeSeason.watched} of ${activeSeason.total} episodes`;
 }
 
+/* ---------- profile selection screen ---------- */
+function ProfileScreen({ onSelect }) {
+  const [migrationCount, setMigrationCount] = React.useState(0);
+
+  React.useEffect(() => {
+    get(ref(db, "items")).then((snap) => {
+      const raw = snap.val();
+      if (raw) {
+        const arr = Array.isArray(raw) ? raw : Object.values(raw);
+        setMigrationCount(arr.length);
+      }
+    }).catch(() => {});
+  }, []);
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.paper, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 28, fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" }}>
+      <div style={{ position: "relative", marginBottom: 8 }}>
+        <div style={{ position: "absolute", left: -14, top: 0, bottom: 0, width: 2, background: C.margin, opacity: 0.55 }} />
+        <h1 style={{ margin: 0, fontSize: 38, fontWeight: 900, color: C.ink, letterSpacing: -0.5 }}>Tally</h1>
+      </div>
+      <p style={{ margin: "0 0 48px", color: C.inkSoft, fontSize: 17 }}>Who's watching?</p>
+
+      {migrationCount > 0 && (
+        <div style={{ width: "100%", maxWidth: 360, background: C.amberBg, borderRadius: 14, padding: "12px 16px", marginBottom: 24, fontSize: 14, color: C.amber, fontWeight: 600, textAlign: "center" }}>
+          Found {migrationCount} existing show{migrationCount !== 1 ? "s" : ""} — they'll move to whichever profile you pick first.
+        </div>
+      )}
+
+      <div style={{ width: "100%", maxWidth: 360, display: "flex", flexDirection: "column", gap: 16 }}>
+        {PROFILES.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => onSelect(p.id)}
+            style={{
+              padding: "22px 24px",
+              borderRadius: 18,
+              border: `2px solid ${p.color}`,
+              background: p.color + "12",
+              color: C.ink,
+              fontSize: 22,
+              fontWeight: 800,
+              cursor: "pointer",
+              textAlign: "left",
+              boxShadow: C.shadow,
+            }}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- family tab ---------- */
+function FamilyTab({ currentProfileId }) {
+  const [otherData, setOtherData] = React.useState({});
+
+  React.useEffect(() => {
+    const others = PROFILES.filter((p) => p.id !== currentProfileId);
+    const unsubs = others.map((p) => {
+      return onValue(profileItemsRef(p.id), (snap) => {
+        const raw = snap.val();
+        const items = raw ? (Array.isArray(raw) ? raw : Object.values(raw)) : [];
+        setOtherData((prev) => ({ ...prev, [p.id]: items }));
+      });
+    });
+    return () => unsubs.forEach((u) => u());
+  }, [currentProfileId]);
+
+  const others = PROFILES.filter((p) => p.id !== currentProfileId);
+
+  return (
+    <div style={{ padding: "0 20px 40px" }}>
+      {others.map((p) => {
+        const items = (otherData[p.id] || []).filter((it) => !isFinished(it)).sort((a, b) => b.updatedAt - a.updatedAt);
+        return (
+          <div key={p.id} style={{ marginBottom: 28 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: p.color, letterSpacing: 0.5, marginBottom: 12 }}>
+              {p.label.toUpperCase()}
+            </div>
+            {items.length === 0 ? (
+              <div style={{ color: C.inkSoft, fontSize: 15 }}>Nothing in progress yet.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {items.map((it) => (
+                  <div key={it.id} style={{ display: "flex", gap: 12, alignItems: "center", background: C.card, borderRadius: 14, padding: 10, boxShadow: C.shadow }}>
+                    <Poster url={it.posterUrl} title={it.title} type={it.type} size={44} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.title}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
+                        <ServiceLogo name={it.service} logoUrl={it.networkLogoUrl} size={14} />
+                        <span style={{ fontSize: 12.5, color: C.inkSoft }}>{progressLabel(it)}</span>
+                      </div>
+                      {it.rating > 0 && <StarDisplay value={it.rating} size={12} />}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ---------- main app ---------- */
 export default function Tally() {
+  const [profile, setProfile] = useState(() => localStorage.getItem("tally-profile") || null);
   const [items, setItems] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("watching");
-  const [view, setView] = useState("home"); // home | addSheet | search | confirmAdd | manualAdd | detail
+  const [view, setView] = useState("home");
   const [selectedId, setSelectedId] = useState(null);
   const [pendingAdd, setPendingAdd] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
-
   const remoteSnapshot = useRef(null);
 
-  // Sync from Firebase; migrate localStorage data on first load if Firebase is empty
+  function handleSelectProfile(profileId) {
+    localStorage.setItem("tally-profile", profileId);
+    setProfile(profileId);
+  }
+
+  // Firebase sync — re-runs when profile changes
   useEffect(() => {
-    const unsubscribe = onValue(itemsRef, (snapshot) => {
+    if (!profile) return;
+    setLoaded(false);
+    remoteSnapshot.current = null;
+    const dbRef = profileItemsRef(profile);
+
+    const unsubscribe = onValue(dbRef, async (snapshot) => {
       const raw = snapshot.val();
-      // Firebase may return an object with numeric keys instead of a true array
       const data = raw ? (Array.isArray(raw) ? raw : Object.values(raw)) : null;
       if (data && data.length > 0) {
         remoteSnapshot.current = JSON.stringify(data);
         setItems(data);
+        setLoaded(true);
       } else {
-        // Firebase empty — migrate from localStorage if anything is there
+        // Check if there is legacy /items data to migrate
         try {
-          const saved = localStorage.getItem("tally-items");
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            remoteSnapshot.current = saved;
-            setItems(parsed);
-            set(itemsRef, parsed);
-            localStorage.removeItem("tally-items");
+          const oldSnap = await get(ref(db, "items"));
+          const oldRaw = oldSnap.val();
+          const oldData = oldRaw ? (Array.isArray(oldRaw) ? oldRaw : Object.values(oldRaw)) : null;
+          if (oldData && oldData.length > 0) {
+            remoteSnapshot.current = JSON.stringify(oldData);
+            setItems(oldData);
+            await set(dbRef, oldData);
+            await remove(ref(db, "items"));
+          } else {
+            // Also check localStorage
+            try {
+              const saved = localStorage.getItem("tally-items");
+              if (saved) {
+                const parsed = JSON.parse(saved);
+                remoteSnapshot.current = saved;
+                setItems(parsed);
+                await set(dbRef, parsed);
+                localStorage.removeItem("tally-items");
+              }
+            } catch (e) {}
           }
         } catch (e) {}
+        setLoaded(true);
       }
-      setLoaded(true);
     });
     return () => unsubscribe();
-  }, []);
+  }, [profile]);
 
-  // Write to Firebase when items change locally (skip if change came from Firebase)
+  // Write to Firebase when items change locally
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || !profile) return;
     const current = JSON.stringify(items);
     if (current === remoteSnapshot.current) return;
     remoteSnapshot.current = current;
-    set(itemsRef, items).catch((e) => console.error("Firebase write failed", e));
-  }, [items, loaded]);
+    set(profileItemsRef(profile), items).catch((e) => console.error("Firebase write failed", e));
+  }, [items, loaded, profile]);
 
   function updateItem(id, patch) {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch, updatedAt: Date.now() } : it)));
@@ -425,6 +562,10 @@ export default function Tally() {
     .filter((it) => (tab === "watching" ? !isFinished(it) : isFinished(it)))
     .sort((a, b) => b.updatedAt - a.updatedAt);
 
+  if (!profile) {
+    return <ProfileScreen onSelect={handleSelectProfile} />;
+  }
+
   if (!loaded) {
     return (
       <div style={{ minHeight: "100vh", background: C.paper, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -451,10 +592,16 @@ export default function Tally() {
             items={visibleItems}
             tab={tab}
             setTab={setTab}
-            onOpen={(id) => {
-              setSelectedId(id);
-              setView("detail");
+            profile={profile}
+            onSwitchProfile={() => {
+              localStorage.removeItem("tally-profile");
+              setProfile(null);
+              setItems([]);
+              setLoaded(false);
+              setTab("watching");
+              setView("home");
             }}
+            onOpen={(id) => { setSelectedId(id); setView("detail"); }}
             onAdd={() => setView("addSheet")}
           />
         )}
@@ -471,10 +618,7 @@ export default function Tally() {
           <SearchScreen
             onBack={() => setView("addSheet")}
             onManualFallback={() => setView("manualAdd")}
-            onSelectShow={(pending) => {
-              setPendingAdd(pending);
-              setView("confirmAdd");
-            }}
+            onSelectShow={(pending) => { setPendingAdd(pending); setView("confirmAdd"); }}
           />
         )}
 
@@ -482,10 +626,7 @@ export default function Tally() {
           <ConfirmAddScreen
             pending={pendingAdd}
             onBack={() => setView("search")}
-            onCancel={() => {
-              setPendingAdd(null);
-              setView("home");
-            }}
+            onCancel={() => { setPendingAdd(null); setView("home"); }}
             onSave={(service, networkLogoUrl) => {
               addItem({ ...pendingAdd, service, networkLogoUrl: networkLogoUrl || null });
               setPendingAdd(null);
@@ -498,21 +639,14 @@ export default function Tally() {
         {view === "manualAdd" && (
           <ManualAddScreen
             onBack={() => setView("addSheet")}
-            onSave={(newItem) => {
-              addItem(newItem);
-              setTab("watching");
-              setView("home");
-            }}
+            onSave={(newItem) => { addItem(newItem); setTab("watching"); setView("home"); }}
           />
         )}
 
         {view === "detail" && selectedItem && (
           <DetailScreen
             item={selectedItem}
-            onBack={() => {
-              setSelectedId(null);
-              setView("home");
-            }}
+            onBack={() => { setSelectedId(null); setView("home"); }}
             onUpdate={(patch) => updateItem(selectedItem.id, patch)}
             onUpdateSeason={(num, patch) => updateSeason(selectedItem.id, num, patch)}
             onAddSeason={(total) => {
@@ -540,21 +674,29 @@ export default function Tally() {
 }
 
 /* ---------- home ---------- */
-function HomeScreen({ items, tab, setTab, onOpen, onAdd }) {
+function HomeScreen({ items, tab, setTab, profile, onSwitchProfile, onOpen, onAdd }) {
+  const profileMeta = PROFILES.find((p) => p.id === profile) || PROFILES[0];
   return (
     <div style={{ paddingBottom: 110 }}>
-      <div style={{ padding: "26px 20px 14px", position: "relative" }}>
+      <div style={{ padding: "26px 20px 14px", position: "relative", display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <div style={{ position: "absolute", left: 12, top: 0, bottom: 0, width: 2, background: C.margin, opacity: 0.55 }} />
         <div style={{ marginLeft: 14 }}>
           <h1 style={{ margin: 0, fontSize: 32, fontWeight: 900, color: C.ink, letterSpacing: -0.5 }}>Tally</h1>
           <p style={{ margin: "4px 0 0", color: C.inkSoft, fontSize: 15 }}>Shows & movies we're watching</p>
         </div>
+        <button
+          onClick={onSwitchProfile}
+          style={{ marginTop: 4, padding: "7px 14px", borderRadius: 99, border: `1.5px solid ${profileMeta.color}`, background: profileMeta.color + "15", color: profileMeta.color, fontSize: 13, fontWeight: 800, cursor: "pointer", flexShrink: 0 }}
+        >
+          {profileMeta.label}
+        </button>
       </div>
 
-      <div style={{ display: "flex", gap: 10, padding: "6px 20px 18px" }}>
+      <div style={{ display: "flex", gap: 8, padding: "6px 20px 18px" }}>
         {[
           { key: "watching", label: "Watching" },
           { key: "finished", label: "Finished" },
+          { key: "family",   label: "Family" },
         ].map((t) => (
           <button
             key={t.key}
@@ -566,7 +708,7 @@ function HomeScreen({ items, tab, setTab, onOpen, onAdd }) {
               border: "none",
               background: tab === t.key ? C.ink : C.card,
               color: tab === t.key ? "#FFF" : C.inkSoft,
-              fontSize: 16,
+              fontSize: 15,
               fontWeight: 700,
               cursor: "pointer",
               boxShadow: tab === t.key ? C.shadow : "none",
@@ -577,6 +719,9 @@ function HomeScreen({ items, tab, setTab, onOpen, onAdd }) {
         ))}
       </div>
 
+      {tab === "family" ? (
+        <FamilyTab currentProfileId={profile} />
+      ) : (
       <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 12 }}>
         {items.length === 0 && (
           <div style={{ textAlign: "center", padding: "50px 10px", color: C.inkSoft }}>
@@ -640,6 +785,7 @@ function HomeScreen({ items, tab, setTab, onOpen, onAdd }) {
           );
         })}
       </div>
+      )}
 
       <button
         onClick={onAdd}
