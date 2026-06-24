@@ -1,5 +1,21 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Search, Plus, X, ChevronLeft, Check, Trash2, Tv, Film, Pencil, Minus, Loader2 } from "lucide-react";
+import { initializeApp } from "firebase/app";
+import { getDatabase, ref, onValue, set } from "firebase/database";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyApP0tlDnKFzEKmBHD3dRw0P9fsqFlxiDA",
+  authDomain: "tally-41760.firebaseapp.com",
+  databaseURL: "https://tally-41760-default-rtdb.firebaseio.com",
+  projectId: "tally-41760",
+  storageBucket: "tally-41760.firebasestorage.app",
+  messagingSenderId: "729360845352",
+  appId: "1:729360845352:web:0cedd79e1573936f54431d"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getDatabase(firebaseApp);
+const itemsRef = ref(db, "items");
 
 /* ---------- design tokens ---------- */
 const C = {
@@ -344,23 +360,42 @@ export default function Tally() {
   const [pendingAdd, setPendingAdd] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
 
+  const remoteSnapshot = useRef(null);
+
+  // Sync from Firebase; migrate localStorage data on first load if Firebase is empty
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("tally-items");
-      if (saved) setItems(JSON.parse(saved));
-    } catch (e) {
-      // no saved data yet
-    }
-    setLoaded(true);
+    const unsubscribe = onValue(itemsRef, (snapshot) => {
+      const raw = snapshot.val();
+      // Firebase may return an object with numeric keys instead of a true array
+      const data = raw ? (Array.isArray(raw) ? raw : Object.values(raw)) : null;
+      if (data && data.length > 0) {
+        remoteSnapshot.current = JSON.stringify(data);
+        setItems(data);
+      } else {
+        // Firebase empty — migrate from localStorage if anything is there
+        try {
+          const saved = localStorage.getItem("tally-items");
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            remoteSnapshot.current = saved;
+            setItems(parsed);
+            set(itemsRef, parsed);
+            localStorage.removeItem("tally-items");
+          }
+        } catch (e) {}
+      }
+      setLoaded(true);
+    });
+    return () => unsubscribe();
   }, []);
 
+  // Write to Firebase when items change locally (skip if change came from Firebase)
   useEffect(() => {
     if (!loaded) return;
-    try {
-      localStorage.setItem("tally-items", JSON.stringify(items));
-    } catch (e) {
-      console.error("Couldn't save", e);
-    }
+    const current = JSON.stringify(items);
+    if (current === remoteSnapshot.current) return;
+    remoteSnapshot.current = current;
+    set(itemsRef, items).catch((e) => console.error("Firebase write failed", e));
   }, [items, loaded]);
 
   function updateItem(id, patch) {
@@ -1274,4 +1309,3 @@ function ConfirmDeleteModal({ onCancel, onConfirm }) {
     </div>
   );
 }
-
