@@ -18,6 +18,7 @@ const db = getDatabase(firebaseApp);
 const PROFILES = [
   { id: "shay-susan", label: "Shay & Susan", color: "#C2492F" },
   { id: "zach",       label: "Zach",         color: "#4F7959" },
+  { id: "hilene",     label: "Hilene",        color: "#5A2BB8" },
 ];
 
 function profileItemsRef(profileId) {
