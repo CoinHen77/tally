@@ -4,13 +4,13 @@ import { initializeApp } from "firebase/app";
 import { getDatabase, ref, onValue, set, get, remove } from "firebase/database";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyApP0tlDnKFzEKmBHD3dRw0P9fsqFlxiDA",
-  authDomain: "tally-41760.firebaseapp.com",
-  databaseURL: "https://tally-41760-default-rtdb.firebaseio.com",
-  projectId: "tally-41760",
-  storageBucket: "tally-41760.firebasestorage.app",
-  messagingSenderId: "729360845352",
-  appId: "1:729360845352:web:0cedd79e1573936f54431d"
+  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  databaseURL:       import.meta.env.VITE_FIREBASE_DATABASE_URL,
+  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId:             import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 const firebaseApp = initializeApp(firebaseConfig);
